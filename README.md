@@ -6,4 +6,4 @@ Solar System Simulator
 - Add GR Effects
 
 ## Contributors
-Jean Maurice Meus, Andrés Ponte Pérez (PLEASE ADD YOUR NAME HERE)
+Jean Maurice Meus, Andrés Ponte Pérez, Makenzie Ellen Wortley (PLEASE ADD YOUR NAME HERE)
