@@ -1,4 +1,9 @@
 # TripleS
 Solar System Simulator
 
-Contributors: Jean Maurice Meus, Andrés Ponte Pérez (PLEASE ADD YOUR NAME HERE)
+## To-Do List
+
+- Add GR Effects
+
+## Contributors
+Jean Maurice Meus, Andrés Ponte Pérez (PLEASE ADD YOUR NAME HERE)
