@@ -4,6 +4,7 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 import math
 import numpy as np
+from typing import List, Tuple, Optional, Union, Any, Sequence
 
 class Camera3D:
     '''
@@ -11,40 +12,58 @@ class Camera3D:
     Handles camera rotation controls and camera velocity.
     '''
 
-    def __init__(self, position=[0, 0, 0], target=[0, 0, -1], up=[0, 1, 0]):
-        self.position = np.array(position, dtype=float)
-        self.target = np.array(target, dtype=float)
-        self.up = np.array(up, dtype=float)
+    def __init__(self, position: Optional[List[float]] = None, target: Optional[List[float]] = None, up: Optional[List[float]] = None) -> None:
+        # Input validation
+        if position is not None:
+            if not isinstance(position, list) or len(position) != 3 or not all(isinstance(x, (int, float)) for x in position):
+                raise ValueError("Position must be a list of 3 numeric values")
+        if target is not None:
+            if not isinstance(target, list) or len(target) != 3 or not all(isinstance(x, (int, float)) for x in target):
+                raise ValueError("Target must be a list of 3 numeric values")
+        if up is not None:
+            if not isinstance(up, list) or len(up) != 3 or not all(isinstance(x, (int, float)) for x in up):
+                raise ValueError("Up must be a list of 3 numeric values")
+            
+        if position is None:
+            position = [0, 0, 0]
+        if target is None:
+            target = [0, 0, -1]
+        if up is None:
+            up = [0, 1, 0]
+            
+        self.position: np.ndarray = np.array(position, dtype=float)
+        self.target: np.ndarray = np.array(target, dtype=float)
+        self.up: np.ndarray = np.array(up, dtype=float)
 
         # Camera rotation angles - start looking straight down -Z axis
-        self.yaw = 0.0  # 0 degrees to look down -Z axis
-        self.pitch = 0.0  # Level
+        self.yaw: float = 0.0  # 0 degrees to look down -Z axis
+        self.pitch: float = 0.0  # Level
 
         # Movement speeds
-        self.movement_speed = 5.0
-        self.mouse_sensitivity = 0.002
-        self.scroll_speed = 2.0
+        self.movement_speed: float = 5.0
+        self.mouse_sensitivity: float = 0.002
+        self.scroll_speed: float = 2.0
 
         # Mouse state
-        self.last_mouse_pos = (0, 0)
-        self.mouse_captured = False
+        self.last_mouse_pos: Tuple[int, int] = (0, 0)
+        self.mouse_captured: bool = False
 
         # Calculate initial forward vector
         self.update_vectors()
 
-    def update_vectors(self):
+    def update_vectors(self) -> None:
         """Update camera vectors based on yaw and pitch"""
         # Calculate forward vector from yaw and pitch
         # Adjusted so yaw=0 looks down -Z axis
-        self.forward = np.array([
+        self.forward: np.ndarray = np.array([
             -math.sin(self.yaw) * math.cos(self.pitch),
             math.sin(self.pitch),
             -math.cos(self.yaw) * math.cos(self.pitch)
         ])
 
         # Calculate right vector (cross product of forward and world up)
-        world_up = np.array([0, 1, 0])
-        self.right = np.cross(self.forward, world_up)
+        world_up: np.ndarray = np.array([0, 1, 0])
+        self.right: np.ndarray = np.cross(self.forward, world_up)
         if np.linalg.norm(self.right) > 0:
             self.right = self.right / np.linalg.norm(self.right)
 
@@ -53,8 +72,12 @@ class Camera3D:
         if np.linalg.norm(self.up) > 0:
             self.up = self.up / np.linalg.norm(self.up)
 
-    def handle_mouse_motion(self, mouse_pos, mouse_buttons):
+    def handle_mouse_motion(self, mouse_pos: Tuple[int, int], mouse_buttons: Tuple[bool, bool, bool]) -> None:
         """Handle mouse movement for camera rotation"""
+        if not isinstance(mouse_pos, tuple) or len(mouse_pos) != 2 or not all(isinstance(x, int) for x in mouse_pos):
+            raise ValueError("mouse_pos must be a tuple of 2 integers")
+        if not isinstance(mouse_buttons, tuple) or len(mouse_buttons) != 3 or not all(isinstance(x, bool) for x in mouse_buttons):
+            raise ValueError("mouse_buttons must be a tuple of 3 boolean values")
         if not self.mouse_captured:
             self.last_mouse_pos = mouse_pos
             return
@@ -76,12 +99,18 @@ class Camera3D:
 
         self.last_mouse_pos = mouse_pos
 
-    def handle_mouse_wheel(self, wheel_y):
+    def handle_mouse_wheel(self, wheel_y: float) -> None:
         """Handle mouse wheel for zoom/forward movement"""
+        if not isinstance(wheel_y, (int, float)):
+            raise ValueError("wheel_y must be a numeric value")
         self.position += self.forward * wheel_y * self.scroll_speed
 
-    def handle_keyboard(self, keys, dt):
+    def handle_keyboard(self, keys: Sequence[bool], dt: float) -> None:
         """Handle keyboard input for movement"""
+        if not hasattr(keys, '__getitem__'):
+            raise ValueError("keys must be a sequence that supports indexing")
+        if not isinstance(dt, (int, float)) or dt < 0:
+            raise ValueError("dt must be a non-negative numeric value")
         velocity = self.movement_speed * dt
 
         # WASD movement
@@ -100,7 +129,7 @@ class Camera3D:
         if keys[pygame.K_e]:
             self.position -= self.up * velocity
 
-    def toggle_mouse_capture(self):
+    def toggle_mouse_capture(self) -> None:
         """Toggle mouse capture for camera control"""
         self.mouse_captured = not self.mouse_captured
         if self.mouse_captured:
@@ -111,7 +140,7 @@ class Camera3D:
             pygame.mouse.set_visible(True)
             pygame.event.set_grab(False)
 
-    def apply_camera_transform(self):
+    def apply_camera_transform(self) -> None:
         """Apply camera transformation to OpenGL"""
         # Calculate look-at point
         look_at = self.position + self.forward
@@ -125,7 +154,7 @@ class Camera3D:
 
 
 class Renderer:
-    def __init__(self):
+    def __init__(self) -> None:
         pygame.init()
         self.fullscreen = False
         # If fullscreen then use correct fullscreen openGL settings
@@ -165,7 +194,7 @@ class Renderer:
             (0, 4), (1, 5), (2, 6), (3, 7)  # Connecting edges
         ]
 
-    def init_opengl(self):
+    def init_opengl(self) -> None:
         """Initialize OpenGL settings"""
         # Set clear color to dark blue
         glClearColor(0.0, 0.1, 0.2, 1.0)
@@ -203,8 +232,10 @@ class Renderer:
 
         # Switch back to modelview matrix
         glMatrixMode(GL_MODELVIEW) # GL_MODELVIEW: Controls camera position and object transformations
-    def draw_planet_center(self, x, y, z):
+    def draw_planet_center(self, x: float, y: float, z: float) -> None:
         """Draw a point at planet center"""
+        if not all(isinstance(coord, (int, float)) for coord in [x, y, z]):
+            raise ValueError("Coordinates x, y, z must be numeric values")
         glDisable(GL_LIGHTING)
         glColor3f(1.0, 1.0, 0.0)  # Yellow color
         glPointSize(10)
@@ -213,8 +244,10 @@ class Renderer:
         glEnd()
         glEnable(GL_LIGHTING)
 
-    def draw_orbit(self, orbit_radius):
+    def draw_orbit(self, orbit_radius: float) -> None:
         """Draw orbit circle"""
+        if not isinstance(orbit_radius, (int, float)) or orbit_radius <= 0:
+            raise ValueError("orbit_radius must be a positive numeric value")
         glDisable(GL_LIGHTING)
         glColor3f(0.5, 0.5, 1.0)  # Light blue color for orbit
         glBegin(GL_LINE_LOOP)
@@ -226,8 +259,12 @@ class Renderer:
         glEnd()
         glEnable(GL_LIGHTING)
 
-    def generate_solar_system(self, planets=[]):
+    def generate_solar_system(self, planets: Optional[List[Any]] = None) -> None:
         """Generate solar system objects"""
+        if planets is None:
+            planets = []
+        if not isinstance(planets, list):
+            raise ValueError("planets must be a list")
         # Draw sun at center
         glPushMatrix()
         glColor3f(1.0, 1.0, 0.0)  # Yellow sun
@@ -261,7 +298,7 @@ class Renderer:
 
             glPopMatrix()
 
-    def draw_text_overlay(self):
+    def draw_text_overlay(self) -> None:
         """Draw text overlay using pygame surface rendered to OpenGL texture"""
         # Create a pygame surface for text rendering
         text_surface = pygame.Surface((350, 250), pygame.SRCALPHA)
@@ -353,7 +390,7 @@ class Renderer:
         glPopMatrix()
         glMatrixMode(GL_MODELVIEW)
 
-    def draw_coordinate_axes(self):
+    def draw_coordinate_axes(self) -> None:
         """Draw coordinate axes for reference"""
         glDisable(GL_LIGHTING)
         glLineWidth(3)
@@ -378,7 +415,7 @@ class Renderer:
         glLineWidth(1)
         glEnable(GL_LIGHTING)
 
-    def handle_events(self):
+    def handle_events(self) -> bool:
         """Handle all pygame events"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -398,12 +435,14 @@ class Renderer:
 
         return True
 
-    def update(self, dt):
+    def update(self, dt: float) -> None:
         """Update game state"""
+        if not isinstance(dt, (int, float)) or dt < 0:
+            raise ValueError("dt must be a non-negative numeric value")
         keys = pygame.key.get_pressed()
         self.camera.handle_keyboard(keys, dt)
 
-    def render(self):
+    def render(self) -> None:
         """Render the scene"""
         # Clear the screen
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -428,7 +467,7 @@ class Renderer:
 
         pygame.display.flip()
 
-    def run(self):
+    def run(self) -> None:
         """Main game loop"""
         running = True
         print("3D Camera Controls Loaded!")
@@ -453,5 +492,28 @@ class Renderer:
 
 
 if __name__ == "__main__":
-    renderer = Renderer()
-    renderer.run()
+    # Test Camera3D initialization first
+    try:
+        print("Testing Camera3D initialization...")
+        test_camera = Camera3D()
+        print("✓ Default Camera3D initialization successful")
+        
+        test_camera2 = Camera3D([1, 2, 3])
+        print("✓ Custom position Camera3D initialization successful")
+        
+        test_camera3 = Camera3D([1, 2, 3], [0, 0, -1], [0, 1, 0])
+        print("✓ Full custom Camera3D initialization successful")
+        
+    except Exception as e:
+        print(f"✗ Camera3D Error: {e}")
+        exit(1)
+    
+    # Test Renderer initialization
+    try:
+        print("Testing Renderer initialization...")
+        renderer = Renderer()
+        print("✓ Renderer initialization successful")
+        renderer.run()
+    except Exception as e:
+        print(f"✗ Renderer Error: {e}")
+        exit(1)
