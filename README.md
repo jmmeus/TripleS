@@ -41,4 +41,4 @@ We welcome contributions from everyone! This project is designed to be beginner-
 
 ## Contributors
 
-Jean Maurice Meus, Andrés Ponte Pérez, Makenzie Ellen Wortley, Richard Mole, Simona Pacuraru
+Jean Maurice Meus, Andrés Ignacio Ponte Pérez, Makenzie Ellen Wortley, Richard Mole, Simona Pacuraru, Eleanor Murray

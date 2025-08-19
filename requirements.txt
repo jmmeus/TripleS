@@ -1,3 +1,6 @@
 matplotlib
 numpy
 param
+pygame
+pyOpenGL
+pytest
