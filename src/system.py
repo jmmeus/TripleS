@@ -1,10 +1,11 @@
 
 import numpy as np
 from satellite import Satellite
+from body import Body
 
 class System(Body):
 
-    def __init__(self, info):
+    def __init__(self, info : float | list[Satellite] | bool) -> None:
         """Initializes the System with either a total mass, a list of satellites, or a boolean for random satellite masses.
         Args:
             info (float, list, bool): 
