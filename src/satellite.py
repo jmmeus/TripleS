@@ -75,21 +75,25 @@ class Satellite(Body):
         # Placeholder for temperature calculation logic
         return 0.0
 
-    def get_coords(self, t: float = 0.0) -> Tuple[Vector3D, Vector3D]:
-        """Return position (km) and velocity (km/s) at time t after epoch."""
-        a, e = self.orbital_prop.semiMajorAxis, self.orbital_prop.eccentricity
-        i: Radians = Radians(math.radians(self.orbital_prop.inclination))
-        raan: Radians = Radians(math.radians(self.orbital_prop.rightAscension))
-        omega: Radians = Radians(math.radians(self.orbital_prop.periapsis))
-        nu0: TrueAnomaly = TrueAnomaly(math.radians(self.orbital_prop.true_anomaly))
+    def _get_orbital_elements_radians(self) -> Tuple[float, float, Radians, Radians, Radians, TrueAnomaly]:
+        """Convert orbital elements to radians and return as tuple."""
+        a = self.orbital_prop.semiMajorAxis
+        e = self.orbital_prop.eccentricity
+        i = Radians(math.radians(self.orbital_prop.inclination))
+        raan = Radians(math.radians(self.orbital_prop.rightAscension))
+        omega = Radians(math.radians(self.orbital_prop.periapsis))
+        nu0 = TrueAnomaly(math.radians(self.orbital_prop.true_anomaly))
+        return a, e, i, raan, omega, nu0
 
+    def _propagate_true_anomaly(self, t: float) -> Tuple[float, float]:
+        """Propagate true anomaly and calculate orbital radius at time t."""
+        a, e, _, _, _, nu0 = self._get_orbital_elements_radians()
+        
         if e == 1.0:
             raise NotImplementedError("Parabolic orbits not supported.")
 
-        # ------------------
-        # Propagate anomaly
-        # ------------------
         if e < 1.0:
+            # Elliptical orbit
             n = math.sqrt(self.mu / a**3)
             E0: EccentricAnomaly = ko.eccentric_anomaly_from_true(nu0, Eccentricity(e))
             m0 = E0 - e*math.sin(E0)
@@ -101,9 +105,8 @@ class Satellite(Body):
             sin_nu = math.sqrt(1 - e*e) * sinE / denom
             cos_nu = (cosE - e) / denom
             nu = math.atan2(sin_nu, cos_nu)
-            p = a * (1 - e*e)
-            r_mag = p / (1 + e*math.cos(nu))
         else:
+            # Hyperbolic orbit
             n = math.sqrt(self.mu / abs(a)**3)
             H0: HyperbolicAnomaly = ko.hyperbolic_anomaly_from_true(nu0, Eccentricity(e))
             m0 = e*math.sinh(H0) - H0
@@ -114,27 +117,48 @@ class Satellite(Body):
             sin_nu = math.sqrt(e*e - 1)*sinhH / denom
             cos_nu = (e - coshH) / denom
             nu = math.atan2(sin_nu, cos_nu)
-            p = a * (1 - e*e)
-            r_mag = p / (1 + e*math.cos(nu))
+        
+        # Calculate orbital radius
+        p = a * (1 - e*e)
+        r_mag = p / (1 + e*math.cos(nu))
+        
+        return nu, r_mag
 
-        # ------------------
-        # Perifocal position/velocity
-        # ------------------
-        r_pf: Vector3D = (r_mag*math.cos(nu), r_mag*math.sin(nu), 0.0)
-        v_pf: Vector3D = (
+    def _calculate_perifocal_position(self, nu: float, r_mag: float) -> Vector3D:
+        """Calculate position vector in perifocal coordinate frame."""
+        return (r_mag*math.cos(nu), r_mag*math.sin(nu), 0.0)
+
+    def _calculate_perifocal_velocity(self, nu: float, p: float, e: float) -> Vector3D:
+        """Calculate velocity vector in perifocal coordinate frame."""
+        return (
             -math.sqrt(self.mu/p) * math.sin(nu),
             math.sqrt(self.mu/p) * (e + math.cos(nu)),
             0.0
         )
 
-        # ------------------
-        # Rotation
-        # ------------------
-        R_total = ko.matmul33(ko.matmul33(ko.R3(raan), ko.R1(i)), ko.R3(omega))
-        r_eci: Vector3D = ko.matmul3(R_total, r_pf)
-        v_eci: Vector3D = ko.matmul3(R_total, v_pf)
+    def _get_transformation_matrix(self) -> ko.Matrix3x3:
+        """Get transformation matrix from perifocal to ECI coordinates."""
+        _, _, i, raan, omega, _ = self._get_orbital_elements_radians()
+        return ko.matmul33(ko.matmul33(ko.R3(raan), ko.R1(i)), ko.R3(omega))
 
-        return r_eci, v_eci
+    def _transform_to_eci(self, perifocal_vector: Vector3D) -> Vector3D:
+        """Transform vector from perifocal to ECI coordinate frame."""
+        R_total = self._get_transformation_matrix()
+        return ko.matmul3(R_total, perifocal_vector)
+
+    def get_coords(self, t: float = 0.0) -> Vector3D:
+        """Return position (km) at time t after epoch."""
+        nu, r_mag = self._propagate_true_anomaly(t)
+        r_pf = self._calculate_perifocal_position(nu, r_mag)
+        return self._transform_to_eci(r_pf)
+
+    def get_velocity(self, t: float = 0.0) -> Vector3D:
+        """Return velocity (km/s) at time t after epoch."""
+        a, e, _, _, _, _ = self._get_orbital_elements_radians()
+        nu, _ = self._propagate_true_anomaly(t)
+        p = a * (1 - e*e)
+        v_pf = self._calculate_perifocal_velocity(nu, p, e)
+        return self._transform_to_eci(v_pf)
 
 
 if __name__ == "__main__":
@@ -213,18 +237,18 @@ if __name__ == "__main__":
     
     # Propagate elliptical orbit
     for t in t_elliptical:
-        pos, vel = sat_elliptical.get_coords(t)
+        pos = sat_elliptical.get_coords(t)
         positions_elliptical.append(pos)
     
     # Propagate circular orbit
     for t in t_circular:
-        pos, vel = sat_circular.get_coords(t)
+        pos = sat_circular.get_coords(t)
         positions_circular.append(pos)
     
     # Propagate hyperbolic orbit
     for t in t_hyperbolic:
         try:
-            pos, vel = sat_hyperbolic.get_coords(t)
+            pos = sat_hyperbolic.get_coords(t)
             positions_hyperbolic.append(pos)
         except Exception as e:
             print(f"   Warning: Error at t={t:.1f}s: {e}")
