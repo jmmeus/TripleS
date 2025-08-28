@@ -8,12 +8,12 @@ from body import Body
 @dataclass
 class OrbitalProp:
     "A class for the orbital elements, using the Keplerian Parameterisation"
-    semi_major_axis:  float          # semi-major axis takes values >0
-    periapsis:      float          # periapsis takes values >0
-    eccentricity:   float = 0         # eccentricity takes values in (0,1) for closed elliptical trajectories, 1 for parabolic trajectories and (1, inf) for hyperbolic orbits
-    inclination:    float = 0          # inclination angle in radians, takes values in [0, pi/2]
-    right_ascension: float = 0          # right ascension, angle in radians, in (0, 2 pi)
-    true_anomaly:    float = 0          # True anomaly, in (0, 2 * pi)
+    semi_major_axis:    float               # semi-major axis takes values >0
+    periapsis:          float               # periapsis takes values >0
+    eccentricity:       float = 0           # eccentricity takes values in (0,1) for closed elliptical trajectories, 1 for parabolic trajectories and (1, inf) for hyperbolic orbits
+    inclination:        float = 0           # inclination angle in radians, takes values in [0, pi/2]
+    right_ascension:    float = 0           # right ascension, angle in radians, in (0, 2 pi)
+    true_anomaly:       float = 0           # True anomaly, in (0, 2 * pi)
 
     def __post_init__(self):
         if (self.semi_major_axis <= 0):
