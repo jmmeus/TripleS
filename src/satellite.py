@@ -53,7 +53,7 @@ class Satellite(Body):
         # Placeholder for temperature calculation logic
         return 0.0
 
-    def get_coords(self):
+    def get_coords(self, time: float) -> tuple[float, float, float]:
 
         # Placeholder for coordinates calculation logic
         return (0.0, 0.0, 0.0)
