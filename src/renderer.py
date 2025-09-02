@@ -5,6 +5,9 @@ from OpenGL.GLU import *
 import math
 import numpy as np
 from typing import List, Tuple, Optional, Union, Any, Sequence
+import time
+import keplerian_orbitals as ko
+from keplerian_orbitals import Vector3D, Radians, Eccentricity, TrueAnomaly, EccentricAnomaly, MeanAnomaly
 
 class Camera3D:
     '''
@@ -153,6 +156,66 @@ class Camera3D:
         )
 
 
+class Planet:
+    def __init__(self, semi_major_axis: float, eccentricity: float, inclination: float, 
+                 raan: float, arg_periapsis: float, true_anomaly_0: float, 
+                 color: Tuple[float, float, float], radius: float, mu: float = 1.0):
+        self.a = semi_major_axis
+        self.e = eccentricity
+        self.i = math.radians(inclination)
+        self.raan = math.radians(raan)
+        self.omega = math.radians(arg_periapsis)
+        self.nu0 = math.radians(true_anomaly_0)
+        self.color = color
+        self.radius = radius
+        self.mu = mu
+        
+        # Calculate mean motion
+        self.n = math.sqrt(self.mu / abs(self.a)**3)
+        
+    def get_position(self, t: float) -> Vector3D:
+        """Get planet position at time t using Keplerian orbital mechanics."""
+        if self.e == 1.0:
+            raise NotImplementedError("Parabolic orbits not supported.")
+            
+        if self.e < 1.0:
+            # Elliptical orbit
+            E0 = ko.eccentric_anomaly_from_true(TrueAnomaly(self.nu0), Eccentricity(self.e))
+            m0 = E0 - self.e * math.sin(E0)
+            m = m0 + self.n * t
+            m = (m + math.pi) % (2 * math.pi) - math.pi
+            E = ko.solve_kepler_elliptic(MeanAnomaly(m), Eccentricity(self.e))
+            
+            cos_E, sin_E = math.cos(E), math.sin(E)
+            denom = 1 - self.e * cos_E
+            sin_nu = math.sqrt(1 - self.e * self.e) * sin_E / denom
+            cos_nu = (cos_E - self.e) / denom
+            nu = math.atan2(sin_nu, cos_nu)
+        else:
+            # Hyperbolic orbit
+            H0 = ko.hyperbolic_anomaly_from_true(TrueAnomaly(self.nu0), Eccentricity(self.e))
+            m0 = self.e * math.sinh(H0) - H0
+            m = m0 + self.n * t
+            H = ko.solve_kepler_hyperbolic(MeanAnomaly(m), Eccentricity(self.e))
+            
+            cosh_H, sinh_H = math.cosh(H), math.sinh(H)
+            denom = self.e * cosh_H - 1
+            sin_nu = math.sqrt(self.e * self.e - 1) * sinh_H / denom
+            cos_nu = (self.e - cosh_H) / denom
+            nu = math.atan2(sin_nu, cos_nu)
+            
+        # Calculate orbital radius
+        p = self.a * (1 - self.e * self.e) if self.e < 1.0 else self.a * (self.e * self.e - 1)
+        r_mag = p / (1 + self.e * math.cos(nu))
+        
+        # Position in perifocal frame
+        r_pf = (r_mag * math.cos(nu), r_mag * math.sin(nu), 0.0)
+        
+        # Transform to ECI frame
+        R_total = ko.matmul33(ko.matmul33(ko.R3(Radians(self.raan)), ko.R1(Radians(self.i))), 
+                             ko.R3(Radians(self.omega)))
+        return ko.matmul3(R_total, r_pf)
+
 class Renderer:
     def __init__(self) -> None:
         pygame.init()
@@ -166,7 +229,7 @@ class Renderer:
             self.display = (1200, 800)
             self.screen = pygame.display.set_mode(self.display, DOUBLEBUF | OPENGL)
 
-        pygame.display.set_caption("3D Camera Controls")
+        pygame.display.set_caption("Keplerian Solar System")
         self.clock = pygame.time.Clock()
         self.width = self.display[0]
         self.height = self.display[1]
@@ -179,7 +242,7 @@ class Renderer:
         self.init_opengl()
 
         # Initialize camera - start at (0, 0, 5) looking down -Z axis
-        self.camera = Camera3D(position=[0, 0, 5])
+        self.camera = Camera3D(position=[0, 0, 15])
 
         # Sample 3D points to render (a simple cube)
         self.cube_vertices = [
@@ -193,6 +256,14 @@ class Renderer:
             (4, 5), (5, 6), (6, 7), (7, 4),  # Front face
             (0, 4), (1, 5), (2, 6), (3, 7)  # Connecting edges
         ]
+        
+        # Time tracking
+        self.simulation_time = 0.0  # Current simulation time
+        self.last_real_time = time.time()  # Last real time measurement
+        self.time_scale = 0.1  # Time acceleration factor
+        
+        # Create planets with realistic Keplerian orbits
+        self.planets = self._create_planets()
 
     def init_opengl(self) -> None:
         """Initialize OpenGL settings"""
@@ -232,6 +303,63 @@ class Renderer:
 
         # Switch back to modelview matrix
         glMatrixMode(GL_MODELVIEW) # GL_MODELVIEW: Controls camera position and object transformations
+        
+    def _create_planets(self) -> List[Planet]:
+        """Create planets with realistic Keplerian orbital parameters."""
+        # Simplified solar system with scaled parameters for visualization
+        mu_sun = 1.0  # Normalized gravitational parameter
+        
+        planets = [
+            # Mercury-like (high eccentricity, fast orbit)
+            Planet(
+                semi_major_axis=3.0,
+                eccentricity=0.2,
+                inclination=7.0,
+                raan=0.0,
+                arg_periapsis=29.0,
+                true_anomaly_0=0.0,
+                color=(0.8, 0.4, 0.2),
+                radius=0.3,
+                mu=mu_sun
+            ),
+            # Venus-like (nearly circular)
+            Planet(
+                semi_major_axis=5.0,
+                eccentricity=0.007,
+                inclination=3.4,
+                raan=76.0,
+                arg_periapsis=55.0,
+                true_anomaly_0=90.0,
+                color=(1.0, 0.7, 0.3),
+                radius=0.4,
+                mu=mu_sun
+            ),
+            # Earth-like
+            Planet(
+                semi_major_axis=7.0,
+                eccentricity=0.017,
+                inclination=0.0,
+                raan=0.0,
+                arg_periapsis=102.0,
+                true_anomaly_0=180.0,
+                color=(0.3, 0.5, 1.0),
+                radius=0.4,
+                mu=mu_sun
+            ),
+            # Mars-like
+            Planet(
+                semi_major_axis=9.0,
+                eccentricity=0.093,
+                inclination=1.85,
+                raan=49.0,
+                arg_periapsis=286.0,
+                true_anomaly_0=270.0,
+                color=(1.0, 0.3, 0.3),
+                radius=0.35,
+                mu=mu_sun
+            ),
+        ]
+        return planets
     def draw_planet_center(self, x: float, y: float, z: float) -> None:
         """Draw a point at planet center"""
         if not all(isinstance(coord, (int, float)) for coord in [x, y, z]):
@@ -244,27 +372,42 @@ class Renderer:
         glEnd()
         glEnable(GL_LIGHTING)
 
-    def draw_orbit(self, orbit_radius: float) -> None:
-        """Draw orbit circle"""
-        if not isinstance(orbit_radius, (int, float)) or orbit_radius <= 0:
-            raise ValueError("orbit_radius must be a positive numeric value")
+    def draw_orbit(self, planet: Planet) -> None:
+        """Draw elliptical orbit path for a planet"""
         glDisable(GL_LIGHTING)
         glColor3f(0.5, 0.5, 1.0)  # Light blue color for orbit
         glBegin(GL_LINE_LOOP)
+        
+        # Draw elliptical orbit by sampling true anomaly
         for i in range(360):
-            angle = math.radians(i)
-            x = orbit_radius * math.cos(angle)
-            z = orbit_radius * math.sin(angle)
-            glVertex3f(x, 0, z)
+            nu = math.radians(i)  # True anomaly from 0 to 2π
+            
+            # Calculate orbital radius at this true anomaly
+            if planet.e < 1.0:
+                p = planet.a * (1 - planet.e * planet.e)
+            else:
+                p = planet.a * (planet.e * planet.e - 1)
+            
+            r_mag = p / (1 + planet.e * math.cos(nu))
+            
+            # Position in perifocal frame
+            r_pf = (r_mag * math.cos(nu), r_mag * math.sin(nu), 0.0)
+            
+            # Transform to ECI frame using planet's orbital parameters
+            R_total = ko.matmul33(ko.matmul33(ko.R3(Radians(planet.raan)), ko.R1(Radians(planet.i))), 
+                                 ko.R3(Radians(planet.omega)))
+            pos = ko.matmul3(R_total, r_pf)
+            
+            glVertex3f(pos[0], pos[1], pos[2])
+            
         glEnd()
         glEnable(GL_LIGHTING)
 
-    def generate_solar_system(self, planets: Optional[List[Any]] = None) -> None:
-        """Generate solar system objects"""
-        if planets is None:
-            planets = []
-        if not isinstance(planets, list):
-            raise ValueError("planets must be a list")
+    def generate_solar_system(self) -> None:
+        """Generate solar system objects with time-dependent Keplerian motion."""
+        # Use the tracked simulation time
+        current_time = self.simulation_time
+        
         # Draw sun at center
         glPushMatrix()
         glColor3f(1.0, 1.0, 0.0)  # Yellow sun
@@ -272,30 +415,31 @@ class Renderer:
         self.draw_planet_center(0, 0, 0)
         glPopMatrix()
 
-        # Draw planets at different orbital distances
-        planet_data = [
-            (3.0, [0.8, 0.4, 0.2], 0.3),  # Mercury-like
-            (5.0, [1.0, 0.7, 0.3], 0.4),  # Venus-like
-            (7.0, [0.3, 0.5, 1.0], 0.4),  # Earth-like
-            (9.0, [1.0, 0.3, 0.3], 0.35),  # Mars-like
-        ]
-
-        for orbit_radius, color, planet_size in planet_data:
+        # Draw planets at their calculated positions
+        for planet in self.planets:
             glPushMatrix()
-
-            # Draw orbit
-            self.draw_orbit(orbit_radius)
-
-            # Position planet (for now, just place them at different positions)
-            angle = math.radians(orbit_radius * 30)  # Different angles for each planet
-            x = orbit_radius * math.cos(angle)
-            z = orbit_radius * math.sin(angle)
-
-            glTranslatef(x, 0, z)
-            glColor3f(color[0], color[1], color[2])
-            gluSphere(gluNewQuadric(), planet_size, 15, 15)
-            self.draw_planet_center(0, 0, 0)
-
+            
+            # Draw elliptical orbit path
+            self.draw_orbit(planet)
+            
+            # Get planet position at current time
+            try:
+                position = planet.get_position(current_time)
+                x, y, z = position
+                
+                # Position and draw planet
+                glTranslatef(x, y, z)
+                glColor3f(planet.color[0], planet.color[1], planet.color[2])
+                gluSphere(gluNewQuadric(), planet.radius, 15, 15)
+                self.draw_planet_center(0, 0, 0)
+                
+            except Exception as e:
+                # If position calculation fails, draw at default position
+                glTranslatef(planet.a, 0, 0)
+                glColor3f(planet.color[0], planet.color[1], planet.color[2])
+                gluSphere(gluNewQuadric(), planet.radius, 15, 15)
+                self.draw_planet_center(0, 0, 0)
+            
             glPopMatrix()
 
     def draw_text_overlay(self) -> None:
@@ -304,17 +448,23 @@ class Renderer:
         text_surface = pygame.Surface((350, 250), pygame.SRCALPHA)
         text_surface.fill((0, 0, 0, 180))  # Semi-transparent black background
 
+        # Use the tracked simulation time for display
+        current_time = self.simulation_time
+        
         # Render text to the surface
         instructions = [
-            "3D Camera Controls:",
+            "Keplerian Solar System:",
             "",
             "SPACE - Toggle mouse capture",
             "WASD - Move horizontally",
             "Q/E - Move up/down",
             "Mouse - Look around",
             "Mouse wheel - Zoom",
+            "+/- - Time scale control",
             "ESC - Exit",
             "",
+            f"Time: {current_time:.1f}s",
+            f"Time Scale: {self.time_scale:.2f}x",
             f"Mouse: {'CAPTURED' if self.camera.mouse_captured else 'FREE'}"
         ]
 
@@ -323,8 +473,10 @@ class Renderer:
 
         for i, line in enumerate(instructions):
             if line.strip():  # Don't render empty lines
-                if line.startswith("3D Camera"):
+                if line.startswith("Keplerian"):
                     color = (255, 255, 100)  # Yellow for title
+                elif line.startswith("Time:") or line.startswith("Time Scale:"):
+                    color = (100, 255, 255)  # Cyan for time info
                 elif line.startswith("Mouse:"):
                     color = (100, 255, 100) if self.camera.mouse_captured else (255, 100, 100)
                 else:
@@ -426,6 +578,10 @@ class Renderer:
                     return False
                 elif event.key == pygame.K_SPACE:
                     self.camera.toggle_mouse_capture()
+                elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
+                    self.time_scale = min(10.0, self.time_scale * 1.2)
+                elif event.key == pygame.K_MINUS:
+                    self.time_scale = max(0.01, self.time_scale / 1.2)
 
             elif event.type == pygame.MOUSEMOTION:
                 self.camera.handle_mouse_motion(event.pos, pygame.mouse.get_pressed())
@@ -439,6 +595,13 @@ class Renderer:
         """Update game state"""
         if not isinstance(dt, (int, float)) or dt < 0:
             raise ValueError("dt must be a non-negative numeric value")
+        
+        # Update simulation time based on real time delta and time scale
+        current_real_time = time.time()
+        real_dt = current_real_time - self.last_real_time
+        self.simulation_time += real_dt * self.time_scale
+        self.last_real_time = current_real_time
+        
         keys = pygame.key.get_pressed()
         self.camera.handle_keyboard(keys, dt)
 
@@ -458,7 +621,7 @@ class Renderer:
 
         # Render solar system in front-center, lower
         glPushMatrix()
-        glTranslatef(0, -3, -6)  # Center, down, and forward from camera
+        glTranslatef(0, -3, -10)  # Center, down, and forward from camera
         self.generate_solar_system()
         glPopMatrix()
 
@@ -470,16 +633,17 @@ class Renderer:
     def run(self) -> None:
         """Main game loop"""
         running = True
-        print("3D Camera Controls Loaded!")
+        print("Keplerian Solar System Loaded!")
         print("Controls:")
         print("  SPACE - Toggle mouse capture")
         print("  WASD - Move horizontally")
         print("  Q/E - Move up/down")
         print("  Mouse - Look around (when captured)")
         print("  Mouse wheel - Zoom")
+        print("  +/- - Increase/decrease time scale")
         print("  ESC - Exit")
         print(f"\nCamera starts at {self.camera.position} looking toward origin")
-        print("You should see cubes and a solar system!")
+        print("You should see planets moving in Keplerian orbits!")
 
         while running:
             dt = self.clock.tick(60) / 1000.0  # Delta time in seconds
