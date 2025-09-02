@@ -8,26 +8,31 @@ class Sun(Body):
         self.name = name
         self.temp = temp
         self.luminosity = luminosity
+        self.radius = Sun._get_radius_from_lum_and_temp(self.luminosity,self.temp)
 
 
-    def get_coords(self):
+    def get_coords(self) -> tuple[float,float,float]:
         # Method that calculates and returns the coordinates of the sun. Defaults to 0,0,0
         coords = (0,0,0)
         return coords
     
-    def get_temp(self):
+    def get_temp(self) -> float:
         # Return temperature
 
         return self.temp
     
-    def get_radius(self):
+    @staticmethod
+    def _get_radius_from_lum_and_temp(luminosity,temp) -> float:
         # Use the Stefan-Boltzmann law to calculate radius based on luminosity and temperature
 
         sbc = 5.670374419e-8
 
-        radius = math.sqrt(self.luminosity/(4*math.pi*sbc*(self.temp)**4))
+        radius = math.sqrt(luminosity/(4*math.pi*sbc*(temp)**4))
 
         return radius
+    
+    def get_radius(self) -> float:
+        return self.radius
 
 
     def has_hat_on(self) -> bool:
@@ -44,4 +49,5 @@ if __name__ == "__main__":
     sun = Sun("Sunny",5778,3.828e26)
 
     radius = sun.get_radius()
+
     print(f"The radius of the sun is {radius}m")
