@@ -5,6 +5,7 @@ from body import Body
 class System(Body):
 
     def __init__(self, info : float | list[Satellite] | bool, dt: float = 1.0):
+
         """Initializes the System with either a total mass, a list of satellites, or a boolean for random satellite masses.
         Args:
             info (float, list, bool): 
