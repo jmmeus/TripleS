@@ -12,6 +12,7 @@ import math
 @dataclass
 class OrbitalProp:
     "A class for the orbital elements, using the Keplerian Parameterisation"
+    
     semi_major_axis:  float          # semi-major axis takes values >0
     periapsis:      float          # periapsis takes values >0
     eccentricity:   float = 0         # eccentricity takes values in (0,1) for closed elliptical trajectories, 1 for parabolic trajectories and (1, inf) for hyperbolic orbits
@@ -31,6 +32,7 @@ class OrbitalProp:
         if not (0 <= self.true_anomaly < 2 * np.pi):
             raise ValueError(f"Invalid true anomaly: {self.true_anomaly}. Must be in [0, 2*pi).")
 
+
 @dataclass
 class SurfaceProp:
     "A class storing properties of the surface of satellites."
@@ -43,6 +45,7 @@ class SurfaceProp:
             raise ValueError(f"Invalid albedo value: {self.albedo}. Must be between 0 and 1.")
         if not (0 <= self.emisivity <= 1):
             raise ValueError(f"Invalid emisivity value: {self.emisivity}. Must be between 0 and 1.")
+
     
 
 class Satellite(Body):
