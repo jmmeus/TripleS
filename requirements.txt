@@ -1,2 +1,5 @@
 matplotlib
 numpy
+pygame
+pyOpenGL
+pytest
