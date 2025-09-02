@@ -13,4 +13,3 @@ class Body(ABC):
     @abstractmethod
     def get_coords(self) -> tuple:
         pass
-
